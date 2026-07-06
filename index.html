@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jarivis Hardware Test</title>
+    <style>
+        body { font-family: system-ui, -apple-system, sans-serif; padding: 20px; max-width: 600px; margin: 0 auto; background-color: #f4f4f9; }
+        .card { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        h2 { margin-top: 0; font-size: 1.2rem; color: #333; }
+        button { border: none; padding: 15px; font-size: 16px; border-radius: 8px; cursor: pointer; width: 100%; font-weight: bold; color: white; margin-bottom: 10px; }
+        .btn-usb { background-color: #10b981; }
+        .btn-bt { background-color: #3b82f6; }
+        button:active { opacity: 0.8; }
+        .status-box { margin-top: 15px; padding: 10px; border-radius: 6px; font-size: 0.9rem; background: #f8fafc; border: 1px solid #e2e8f0; word-wrap: break-word; }
+        .error { color: #ef4444; font-weight: bold; }
+        .success { color: #10b981; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <div class="card">
+        <h2>🧾 Test VSC MP-58C (Struk via USB)</h2>
+        <button class="btn-usb" onclick="printReceiptUSB()">Koneksikan & Cetak Struk</button>
+        <div id="status-usb" class="status-box">Status: Menunggu instruksi...</div>
+    </div>
+
+    <div class="card">
+        <h2>🏷️ Test Clabel CT221B (Label via Bluetooth)</h2>
+        <button class="btn-bt" onclick="printLabelBT()">Koneksikan & Cetak Label</button>
+        <div id="status-bt" class="status-box">Status: Menunggu instruksi...</div>
+    </div>
+
+    <script>
+        // --- UTILITAS ---
+        function updateStatus(id, message, type = 'info') {
+            const el = document.getElementById(id);
+            el.innerHTML = message;
+            el.className = `status-box ${type}`;
+        }
+
+        // --- FUNGSI 1: CETAK STRUK VIA USB (Web Serial) ---
+        async function printReceiptUSB() {
+            updateStatus('status-usb', 'Meminta akses USB...', 'info');
+            if (!navigator.serial) {
+                updateStatus('status-usb', 'Web Serial API tidak didukung browser ini.', 'error');
+                return;
+            }
+
+            try {
+                const port = await navigator.serial.requestPort();
+                await port.open({ baudRate: 9600 });
+                
+                updateStatus('status-usb', 'Port terbuka, mengirim data...', 'info');
+
+                // Data ESC/POS Sederhana
+                let receipt = "";
+                receipt += "      JARIVIS STORE      \n";
+                receipt += "--------------------------\n";
+                receipt += "Kopi Hitam      Rp 15.000\n";
+                receipt += "Nasi Goreng     Rp 25.000\n";
+                receipt += "--------------------------\n";
+                receipt += "Total           Rp 40.000\n";
+                receipt += "       Terima Kasih       \n\n\n\n";
+
+                const encoder = new TextEncoder();
+                const data = encoder.encode(receipt);
+                
+                const writer = port.writable.getWriter();
+                await writer.write(data);
+                
+                writer.releaseLock();
+                await port.close();
+                
+                updateStatus('status-usb', 'Cetak USB Berhasil!', 'success');
+            } catch (error) {
+                updateStatus('status-usb', `Gagal: ${error.message}`, 'error');
+            }
+        }
+
+        // --- FUNGSI 2: CETAK LABEL VIA BLUETOOTH (Web Bluetooth) ---
+        async function printLabelBT() {
+            updateStatus('status-bt', 'Mencari perangkat Bluetooth...', 'info');
+            if (!navigator.bluetooth) {
+                updateStatus('status-bt', 'Web Bluetooth API tidak didukung.', 'error');
+                return;
+            }
+
+            // Data TSPL (Ukuran 50x30mm)
+            let tspl = "SIZE 50 mm, 30 mm\r\nGAP 2 mm, 0 mm\r\nCLS\r\n";
+            tspl += 'TEXT 30, 30, "TSS24.BF2", 0, 1, 1, "Produk Jarivis"\r\n';
+            tspl += 'TEXT 30, 75, "TSS24.BF2", 0, 1, 1, "Rp 99.000"\r\n';
+            tspl += 'BARCODE 30, 120, "128", 60, 1, 0, 2, 2, "JARIVIS99"\r\n';
+            tspl += "PRINT 1,1\r\n";
+
+            try {
+                const device = await navigator.bluetooth.requestDevice({
+                    filters: [{ namePrefix: "CT221B" }, { namePrefix: "Clabel" }],
+                    optionalServices: [
+                        "000018f0-0000-1000-8000-00805f9b34fb",
+                        "49535343-fe7d-4ae5-8fa9-9fafd205e455",
+                        "e7810a71-73ae-499d-8c15-faa9aef0c3f2"
+                    ]
+                });
+
+                updateStatus('status-bt', 'Menghubungkan ke GATT Server...', 'info');
+                const server = await device.gatt.connect();
+                
+                let targetCharacteristic = null;
+                const services = await server.getPrimaryServices();
+                
+                for (const service of services) {
+                    const characteristics = await service.getCharacteristics();
+                    targetCharacteristic = characteristics.find(
+                        c => c.properties.write || c.properties.writeWithoutResponse
+                    );
+                    if (targetCharacteristic) break;
+                }
+
+                if (!targetCharacteristic) throw new Error("Characteristic Write tidak ditemukan.");
+
+                updateStatus('status-bt', 'Mengirim data TSPL...', 'info');
+                const encoder = new TextEncoder();
+                await targetCharacteristic.writeValue(encoder.encode(tspl));
+                
+                device.gatt.disconnect();
+                updateStatus('status-bt', 'Cetak Bluetooth Berhasil!', 'success');
+            } catch (error) {
+                updateStatus('status-bt', `Gagal: ${error.message}`, 'error');
+            }
+        }
+    </script>
+</body>
+</html>
