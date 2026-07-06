@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Print Clabel CT221B</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            max-width: 500px;
+            margin: 0 auto;
+            text-align: center;
+        }
+        .card {
+            border: 1px solid #ddd;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            width: 100%;
+            margin-top: 20px;
+        }
+        button:active {
+            background-color: #0056b3;
+        }
+        #status {
+            margin-top: 20px;
+            padding: 10px;
+            border-radius: 5px;
+            font-weight: bold;
+            background-color: #f8f9fa;
+            word-wrap: break-word;
+        }
+        .error { color: #dc3545; }
+        .success { color: #28a745; }
+        .info { color: #17a2b8; }
+    </style>
+</head>
+<body>
+
+    <div class="card">
+        <h2>Uji Coba Cetak Label<br>Clabel CT221B</h2>
+        <p>Ukuran Kertas: 50mm x 30mm</p>
+        
+        <button id="btnPrint" onclick="testPrintLabel()">Koneksikan & Cetak Label</button>
+        
+        <div id="status">Status: Menunggu instruksi...</div>
+    </div>
+
+    <script>
+        function updateStatus(message, type = 'info') {
+            const statusDiv = document.getElementById('status');
+            statusDiv.innerHTML = message;
+            statusDiv.className = type;
+            console.log(`[${type.toUpperCase()}] ${message}`);
+        }
+
+        async function testPrintLabel() {
+            updateStatus("Mengecek dukungan Bluetooth...", "info");
+            
+            if (!navigator.bluetooth) {
+                updateStatus("Web Bluetooth API tidak didukung di browser ini. Gunakan Chrome di Android.", "error");
+                return;
+            }
+
+            // Data Dummy Produk
+            const productName = "Produk Test Jarivis";
+            const price = "Rp 45.000";
+            const barcodeData = "JARIVIS001";
+
+            // Susun perintah TSPL
+            let tspl = "";
+            tspl += "SIZE 50 mm, 30 mm\r\n";
+            tspl += "GAP 2 mm, 0 mm\r\n";
+            tspl += "CLS\r\n";
+            tspl += `TEXT 30, 30, "TSS24.BF2", 0, 1, 1, "${productName}"\r\n`;
+            tspl += `TEXT 30, 75, "TSS24.BF2", 0, 1, 1, "${price}"\r\n`;
+            tspl += `BARCODE 30, 120, "128", 60, 1, 0, 2, 2, "${barcodeData}"\r\n`;
+            tspl += "PRINT 1,1\r\n";
+
+            try {
+                updateStatus("Silakan pilih perangkat Clabel di pop-up...", "info");
+
+                // Meminta koneksi Bluetooth
+                const device = await navigator.bluetooth.requestDevice({
+                    filters: [
+                        { namePrefix: "CT221B" }, 
+                        { namePrefix: "Clabel" }
+                    ],
+                    optionalServices: [
+                        "000018f0-0000-1000-8000-00805f9b34fb",
+                        "49535343-fe7d-4ae5-8fa9-9fafd205e455",
+                        "e7810a71-73ae-499d-8c15-faa9aef0c3f2"
+                    ]
+                });
+
+                updateStatus(`Terhubung ke: ${device.name}. Menyiapkan data...`, "info");
+
+                const server = await device.gatt.connect();
+                let targetCharacteristic = null;
+
+                const services = await server.getPrimaryServices();
+                for (const service of services) {
+                    const characteristics = await service.getCharacteristics();
+                    targetCharacteristic = characteristics.find(
+                        c => c.properties.write || c.properties.writeWithoutResponse
+                    );
+                    if (targetCharacteristic) {
+                        console.log(`Jalur Write ditemukan di service: ${service.uuid}`);
+                        break; 
+                    }
+                }
+
+                if (!targetCharacteristic) {
+                    throw new Error("Tidak menemukan jalur Write (Characteristic) pada perangkat ini.");
+                }
+
+                updateStatus("Mengirim data TSPL ke printer...", "info");
+
+                // Encode string TSPL ke Uint8Array
+                const encoder = new TextEncoder();
+                const byteData = encoder.encode(tspl);
+
+                // Kirim byte data
+                await targetCharacteristic.writeValue(byteData);
+                
+                // Putus koneksi
+                device.gatt.disconnect();
+                updateStatus("Berhasil! Label seharusnya sudah tercetak.", "success");
+
+            } catch (error) {
+                // Tangani user yang batal memilih atau error lainnya
+                if (error.name === 'NotFoundError') {
+                    updateStatus("Dibatalkan: Perangkat tidak dipilih.", "error");
+                } else {
+                    updateStatus(`Gagal: ${error.message}`, "error");
+                }
+            }
+        }
+    </script>
+</body>
+</html>
