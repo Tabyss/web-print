@@ -154,11 +154,13 @@
                 const tsplCommands = [
                     "SIZE 50 mm, 30 mm",
                     "GAP 2 mm, 0 mm",
+                    "DENSITY 12", // Memaksa elemen pemanas lebih panas (tinta lebih pekat)
                     "DIRECTION 1",
                     "CLS",
-                    'TEXT 30, 30, "TSS24.BF2", 0, 1, 1, "TEST JARIVIS"',
-                    'TEXT 30, 75, "TSS24.BF2", 0, 1, 1, "Rp 99.000"',
-                    'BARCODE 30, 120, "128", 60, 1, 0, 2, 2, "JARIVIS123"',
+                    // Menggunakan font standar "4", koordinat X dan Y disesuaikan sedikit
+                    'TEXT 20, 20, "4", 0, 1, 1, "TEST JARIVIS"',
+                    'TEXT 20, 70, "4", 0, 1, 1, "Rp 99.000"',
+                    'BARCODE 20, 120, "128", 60, 1, 0, 2, 2, "JARIVIS123"',
                     "PRINT 1,1"
                 ];
 
