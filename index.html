@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hardware Test</title>
+    <title>Hardware Test (Advanced)</title>
     <style>
         body { font-family: system-ui, -apple-system, sans-serif; padding: 20px; max-width: 600px; margin: 0 auto; background-color: #f4f4f9; }
         .card { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 20px; }
@@ -20,30 +20,83 @@
 <body>
 
     <div class="card">
-        <h2>Test VSC MP-58C (Struk via USB)</h2>
+        <h2>🧾 Test VSC MP-58C (Struk via USB)</h2>
         <button class="btn-usb" onclick="printReceiptUSB()">Koneksikan & Cetak Struk</button>
         <div id="status-usb" class="status-box">Status: Menunggu instruksi...</div>
     </div>
 
     <div class="card">
-        <h2>Test Clabel (Label via Bluetooth)</h2>
+        <h2>🏷️ Test Clabel (Label via Bluetooth)</h2>
         <button class="btn-bt" onclick="printLabelBT()">Koneksikan & Cetak Label</button>
         <div id="status-bt" class="status-box">Status: Menunggu instruksi...</div>
     </div>
 
-    <script>
+    <script type="module">
+        // Impor langsung dari CDN esm.sh (didukung penuh oleh Chrome Android)
+        import ReceiptPrinterEncoder from 'https://esm.sh/@point-of-sale/receipt-printer-encoder';
+
         // --- UTILITAS ---
-        function updateStatus(id, message, type = 'info') {
+        // Karena ini modul, kita wajib melekatkan fungsi ke object 'window' agar tombol onClick HTML bisa memanggilnya
+        window.updateStatus = function(id, message, type = 'info') {
             const el = document.getElementById(id);
             el.innerHTML = message;
             el.className = `status-box ${type}`;
+            console.log(`[${type.toUpperCase()}] ${message}`);
+        };
+
+        // --- KONFIGURASI BLE LANJUTAN ---
+        const KNOWN_PRINTER_PROFILES = [
+            { label: '18f0', service: '000018f0-0000-1000-8000-00805f9b34fb', writeCharacteristic: '00002af1-0000-1000-8000-00805f9b34fb' },
+            { label: 'ff00', service: '0000ff00-0000-1000-8000-00805f9b34fb', writeCharacteristic: '0000ff02-0000-1000-8000-00805f9b34fb' },
+            { label: 'microchip-uart', service: '49535343-fe7d-4ae5-8fa9-9fafd205e455', writeCharacteristic: '49535343-1e4d-4bd9-ba04-ec5dfe26373c' },
+            { label: 'ffe0', service: '0000ffe0-0000-1000-8000-00805f9b34fb', writeCharacteristic: '0000ffe1-0000-1000-8000-00805f9b34fb' },
+        ];
+
+        const BLE_WRITE_CHUNK_SIZE = 100;
+
+        async function connectPrinter(onDisconnect) {
+            // Gunakan filter agar pop-up tidak tercampur perangkat Bluetooth lain (seperti TV/Speaker)
+            const device = await navigator.bluetooth.requestDevice({
+                filters: [{ namePrefix: "CT221B" }, { namePrefix: "Clabel" }],
+                optionalServices: KNOWN_PRINTER_PROFILES.map((profile) => profile.service),
+            });
+
+            device.addEventListener('gattserverdisconnected', onDisconnect);
+
+            const server = await device.gatt?.connect();
+            if (!server) throw new Error('Tidak bisa terhubung ke GATT server perangkat.');
+
+            for (const profile of KNOWN_PRINTER_PROFILES) {
+                try {
+                    const service = await server.getPrimaryService(profile.service);
+                    const characteristic = await service.getCharacteristic(profile.writeCharacteristic);
+                    return { device, characteristic, profileLabel: profile.label };
+                } catch {
+                    // Jika profil ini tidak ada, abaikan dan coba profil selanjutnya di loop
+                }
+            }
+
+            throw new Error('Tidak ada profil UUID yang cocok dengan perangkat ini.');
         }
 
-        // --- FUNGSI 1: CETAK STRUK VIA USB (Web Serial) ---
-        async function printReceiptUSB() {
-            updateStatus('status-usb', 'Meminta akses USB...', 'info');
+        async function sendToPrinter(characteristic, data) {
+            const canWriteWithoutResponse = characteristic.properties.writeWithoutResponse;
+            // Teknik Chunking (Pecah data per 100 byte agar buffer printer murah tidak penuh)
+            for (let offset = 0; offset < data.length; offset += BLE_WRITE_CHUNK_SIZE) {
+                const chunk = data.slice(offset, offset + BLE_WRITE_CHUNK_SIZE);
+                if (canWriteWithoutResponse) {
+                    await characteristic.writeValueWithoutResponse(chunk);
+                } else {
+                    await characteristic.writeValue(chunk);
+                }
+            }
+        }
+
+        // --- FUNGSI 1: CETAK STRUK VIA USB (Diperbarui dengan Encoder) ---
+        window.printReceiptUSB = async function() {
+            window.updateStatus('status-usb', 'Meminta akses USB...', 'info');
             if (!navigator.serial) {
-                updateStatus('status-usb', 'Web Serial API tidak didukung browser ini.', 'error');
+                window.updateStatus('status-usb', 'Web Serial API tidak didukung browser ini.', 'error');
                 return;
             }
 
@@ -51,84 +104,84 @@
                 const port = await navigator.serial.requestPort();
                 await port.open({ baudRate: 9600 });
                 
-                updateStatus('status-usb', 'Port terbuka, mengirim data...', 'info');
+                window.updateStatus('status-usb', 'Menyusun ESC/POS dari Encoder...', 'info');
 
-                // Data ESC/POS Sederhana
-                let receipt = "";
-                receipt += "      JARIVIS STORE      \n";
-                receipt += "--------------------------\n";
-                receipt += "Kopi Hitam      Rp 15.000\n";
-                receipt += "Nasi Goreng     Rp 25.000\n";
-                receipt += "--------------------------\n";
-                receipt += "Total           Rp 40.000\n";
-                receipt += "       Terima Kasih       \n\n\n\n";
+                // Generate byte langsung dari library encoder (lebih rapi & tahan banting)
+                const receiptBytes = new ReceiptPrinterEncoder()
+                    .initialize()
+                    .align('center')
+                    .bold(true)
+                    .line('TEST STORE JARIVIS')
+                    .bold(false)
+                    .line('USB Printer Test')
+                    .newline()
+                    .align('left')
+                    .line('Kopi Hitam             15.000')
+                    .line('Nasi Goreng            25.000')
+                    .newline()
+                    .align('right')
+                    .bold(true)
+                    .line('TOTAL: 40.000')
+                    .bold(false)
+                    .align('center')
+                    .line(new Date().toLocaleString())
+                    .newline()
+                    .cut('full')
+                    .encode();
 
-                const encoder = new TextEncoder();
-                const data = encoder.encode(receipt);
-                
                 const writer = port.writable.getWriter();
-                await writer.write(data);
+                await writer.write(receiptBytes);
                 
                 writer.releaseLock();
                 await port.close();
                 
-                updateStatus('status-usb', 'Cetak USB Berhasil!', 'success');
+                window.updateStatus('status-usb', 'Cetak USB Berhasil!', 'success');
             } catch (error) {
-                updateStatus('status-usb', `Gagal: ${error.message}`, 'error');
+                window.updateStatus('status-usb', `Gagal: ${error.message}`, 'error');
             }
-        }
+        };
 
-        // --- FUNGSI 2: CETAK LABEL VIA BLUETOOTH (Web Bluetooth) ---
-        async function printLabelBT() {
-            updateStatus('status-bt', 'Mencari perangkat Bluetooth...', 'info');
+        // --- FUNGSI 2: CETAK LABEL VIA BLUETOOTH (Diperbarui dengan Chunking & Profil Dinamis) ---
+        window.printLabelBT = async function() {
+            window.updateStatus('status-bt', 'Mencari perangkat Bluetooth...', 'info');
             if (!navigator.bluetooth) {
-                updateStatus('status-bt', 'Web Bluetooth API tidak didukung.', 'error');
+                window.updateStatus('status-bt', 'Web Bluetooth API tidak didukung.', 'error');
                 return;
             }
 
-            // Data TSPL (Ukuran 50x30mm)
-            let tspl = "SIZE 50 mm, 30 mm\r\nGAP 2 mm, 0 mm\r\nCLS\r\n";
-            tspl += 'TEXT 30, 30, "TSS24.BF2", 0, 1, 1, "Produk Jarivis"\r\n';
-            tspl += 'TEXT 30, 75, "TSS24.BF2", 0, 1, 1, "Rp 99.000"\r\n';
-            tspl += 'BARCODE 30, 120, "128", 60, 1, 0, 2, 2, "JARIVIS99"\r\n';
-            tspl += "PRINT 1,1\r\n";
+            // Data CPCL Sederhana
+            let cpcl = "";
+            cpcl += "! 0 200 200 240 1\r\n"; 
+            cpcl += "PAGE-WIDTH 400\r\n";     
+            cpcl += "TEXT 4 0 10 10 TEST JARIVIS\r\n"; 
+            cpcl += "TEXT 4 0 10 70 Rp 99.000\r\n";
+            cpcl += "BARCODE 128 1 1 50 10 130 12345678\r\n";
+            cpcl += "PRINT\r\n";
+
+            const encoder = new TextEncoder();
+            const payloadBytes = encoder.encode(cpcl);
+
+            let connectedDevice = null;
 
             try {
-                const device = await navigator.bluetooth.requestDevice({
-                    filters: [{ namePrefix: "CT221B" }, { namePrefix: "Clabel" }],
-                    optionalServices: [
-                        "000018f0-0000-1000-8000-00805f9b34fb",
-                        "49535343-fe7d-4ae5-8fa9-9fafd205e455",
-                        "e7810a71-73ae-499d-8c15-faa9aef0c3f2"
-                    ]
+                // Gunakan fungsi koneksi dinamis dari snippet
+                const { device, characteristic, profileLabel } = await connectPrinter(() => {
+                    console.log('Perangkat terputus dari GATT Server.');
                 });
-
-                updateStatus('status-bt', 'Menghubungkan ke GATT Server...', 'info');
-                const server = await device.gatt.connect();
                 
-                let targetCharacteristic = null;
-                const services = await server.getPrimaryServices();
-                
-                for (const service of services) {
-                    const characteristics = await service.getCharacteristics();
-                    targetCharacteristic = characteristics.find(
-                        c => c.properties.write || c.properties.writeWithoutResponse
-                    );
-                    if (targetCharacteristic) break;
-                }
+                connectedDevice = device;
+                window.updateStatus('status-bt', `Cocok dengan profil (${profileLabel}). Mengirim data...`, 'info');
 
-                if (!targetCharacteristic) throw new Error("Characteristic Write tidak ditemukan.");
-
-                updateStatus('status-bt', 'Mengirim data TSPL...', 'info');
-                const encoder = new TextEncoder();
-                await targetCharacteristic.writeValue(encoder.encode(tspl));
+                // Gunakan fungsi chunking dari snippet
+                await sendToPrinter(characteristic, payloadBytes);
                 
                 device.gatt.disconnect();
-                updateStatus('status-bt', 'Cetak Bluetooth Berhasil!', 'success');
+                window.updateStatus('status-bt', 'Cetak Bluetooth Berhasil!', 'success');
             } catch (error) {
-                updateStatus('status-bt', `Gagal: ${error.message}`, 'error');
+                if (connectedDevice && connectedDevice.gatt) connectedDevice.gatt.disconnect();
+                window.updateStatus('status-bt', `Gagal: ${error.message}`, 'error');
             }
-        }
+        };
     </script>
 </body>
 </html>
