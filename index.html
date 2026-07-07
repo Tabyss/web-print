@@ -150,18 +150,15 @@
         // --- 4. EKSEKUSI CETAK LABEL (CLABEL) ---
         window.printLabelBT = async function() {
             try {
-                // Data TSPL berbentuk Array agar dikirim baris demi baris (Line-by-line)
-                const tsplCommands = [
-                    "SIZE 50 mm, 30 mm",
-                    "GAP 2 mm, 0 mm",
-                    "DENSITY 12", // Memaksa elemen pemanas lebih panas (tinta lebih pekat)
-                    "DIRECTION 1",
-                    "CLS",
-                    // Menggunakan font standar "4", koordinat X dan Y disesuaikan sedikit
-                    'TEXT 20, 20, "4", 0, 1, 1, "TEST JARIVIS"',
-                    'TEXT 20, 70, "4", 0, 1, 1, "Rp 99.000"',
-                    'BARCODE 20, 120, "128", 60, 1, 0, 2, 2, "JARIVIS123"',
-                    "PRINT 1,1"
+                // Menggunakan bahasa CPCL (Sering digunakan oleh Clabel)
+                const cpclCommands = [
+                    "! 0 200 200 240 1", // Inisialisasi: Offset 0, 200dpi, Y-Height 240 (30mm), Qty 1
+                    "PAGE-WIDTH 400",    // X-Width 400 (50mm)
+                    "TEXT 4 0 20 20 TEST JARIVIS", // Format: TEXT [font] [size] [X] [Y] [Teks]
+                    "TEXT 4 0 20 70 Rp 99.000",
+                    "BARCODE 128 1 1 50 20 120 JARIVIS123", // Format: BARCODE [tipe] [width] [ratio] [height] [X] [Y] [Data]
+                    "FORM",  // Instruksikan mesin untuk mencari batas GAP stiker selanjutnya
+                    "PRINT"  // Eksekusi cetak
                 ];
 
                 const requestOptions = {
@@ -173,7 +170,8 @@
                     ]
                 };
 
-                await connectAndWriteBLE(requestOptions, tsplCommands, 'status-label');
+                // Panggil fungsi dengan array CPCL
+                await connectAndWriteBLE(requestOptions, cpclCommands, 'status-label');
 
             } catch (error) {
                 window.updateStatus('status-label', `Gagal: ${error.message}`, 'error');
