@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Jarivis Print Test (All Bluetooth)</title>
+    <title>Jarivis Print Test (Stable BLE)</title>
     <style>
         body { font-family: system-ui, -apple-system, sans-serif; padding: 20px; max-width: 600px; margin: 0 auto; background-color: #f4f4f9; }
         .card { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 20px; }
@@ -42,8 +42,8 @@
             console.log(`[${type.toUpperCase()}] ${message}`);
         };
 
-        // --- 2. FUNGSI INTI BLUETOOTH (Dipakai Bersama) ---
-        async function connectAndWriteBLE(requestOptions, payloadBytes, statusId) {
+        // --- 2. FUNGSI INTI BLUETOOTH (Smart Sender) ---
+        async function connectAndWriteBLE(requestOptions, payload, statusId) {
             if (!navigator.bluetooth) {
                 throw new Error('Web Bluetooth API tidak didukung di browser ini.');
             }
@@ -57,7 +57,6 @@
             let targetCharacteristic = null;
             const services = await server.getPrimaryServices();
 
-            // Mencari jalur Write secara otomatis dari service yang tersedia
             for (const service of services) {
                 const characteristics = await service.getCharacteristics();
                 targetCharacteristic = characteristics.find(
@@ -72,21 +71,33 @@
             }
 
             window.updateStatus(statusId, 'Mengirim data ke printer...', 'info');
-            
-            // Mekanisme Chunking (Kirim per 100 byte agar stabil)
-            const CHUNK_SIZE = 100;
             const canWriteWithoutResponse = targetCharacteristic.properties.writeWithoutResponse;
-
-            for (let offset = 0; offset < payloadBytes.length; offset += CHUNK_SIZE) {
-                const chunk = payloadBytes.slice(offset, offset + CHUNK_SIZE);
+            
+            // Helper untuk eksekusi penulisan byte
+            const writeData = async (chunk) => {
                 if (canWriteWithoutResponse) {
                     await targetCharacteristic.writeValueWithoutResponse(chunk);
                 } else {
                     await targetCharacteristic.writeValue(chunk);
                 }
+            };
+
+            // LOGIKA PENGIRIMAN CERDAS
+            if (payload instanceof Uint8Array) {
+                // Mode Struk (Kirim per 100 byte tanpa delay)
+                for (let offset = 0; offset < payload.length; offset += 100) {
+                    await writeData(payload.slice(offset, offset + 100));
+                }
+            } else if (Array.isArray(payload)) {
+                // Mode Label (Kirim baris demi baris dengan jeda 30ms)
+                const encoder = new TextEncoder();
+                for (const cmd of payload) {
+                    await writeData(encoder.encode(cmd + "\r\n"));
+                    await new Promise(resolve => setTimeout(resolve, 30)); 
+                }
             }
 
-            // Selalu putus koneksi setelah selesai
+            // Selalu putus koneksi setelah pengiriman selesai
             device.gatt.disconnect();
             window.updateStatus(statusId, 'Cetak Bluetooth Berhasil!', 'success');
         }
@@ -95,7 +106,7 @@
         // --- 3. EKSEKUSI CETAK STRUK ---
         window.printReceiptBT = async function() {
             try {
-                // Generate format struk menggunakan Encoder
+                // Generate format struk menggunakan Encoder (Output berupa Uint8Array)
                 const receiptBytes = new ReceiptPrinterEncoder()
                     .initialize()
                     .align('center')
@@ -118,7 +129,6 @@
                     .cut('full')
                     .encode();
 
-                // Parameter Bluetooth untuk Printer Struk Generik
                 const requestOptions = {
                     acceptAllDevices: true,
                     optionalServices: [
@@ -140,19 +150,18 @@
         // --- 4. EKSEKUSI CETAK LABEL (CLABEL) ---
         window.printLabelBT = async function() {
             try {
-                // Data CPCL untuk Clabel
-                let cpcl = "";
-                cpcl += "! 0 200 200 240 1\r\n"; 
-                cpcl += "PAGE-WIDTH 400\r\n";     
-                cpcl += "TEXT 4 0 10 10 TEST JARIVIS\r\n"; 
-                cpcl += "TEXT 4 0 10 70 Rp 99.000\r\n";
-                cpcl += "BARCODE 128 1 1 50 10 130 JARIVIS123\r\n";
-                cpcl += "PRINT\r\n";
+                // Data TSPL berbentuk Array agar dikirim baris demi baris (Line-by-line)
+                const tsplCommands = [
+                    "SIZE 50 mm, 30 mm",
+                    "GAP 2 mm, 0 mm",
+                    "DIRECTION 1",
+                    "CLS",
+                    'TEXT 30, 30, "TSS24.BF2", 0, 1, 1, "TEST JARIVIS"',
+                    'TEXT 30, 75, "TSS24.BF2", 0, 1, 1, "Rp 99.000"',
+                    'BARCODE 30, 120, "128", 60, 1, 0, 2, 2, "JARIVIS123"',
+                    "PRINT 1,1"
+                ];
 
-                const encoder = new TextEncoder();
-                const labelBytes = encoder.encode(cpcl);
-
-                // Parameter Bluetooth spesifik untuk Clabel (Sesuai request)
                 const requestOptions = {
                     filters: [{ namePrefix: "CT221B" }, { namePrefix: "Clabel" }],
                     optionalServices: [
@@ -162,7 +171,7 @@
                     ]
                 };
 
-                await connectAndWriteBLE(requestOptions, labelBytes, 'status-label');
+                await connectAndWriteBLE(requestOptions, tsplCommands, 'status-label');
 
             } catch (error) {
                 window.updateStatus('status-label', `Gagal: ${error.message}`, 'error');
