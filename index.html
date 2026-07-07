@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Jarivis Print Test (Stable BLE)</title>
+    <title>Jarivis Print Test (TSPL Chunking)</title>
     <style>
         body { font-family: system-ui, -apple-system, sans-serif; padding: 20px; max-width: 600px; margin: 0 auto; background-color: #f4f4f9; }
         .card { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 20px; }
@@ -34,7 +34,6 @@
     <script type="module">
         import ReceiptPrinterEncoder from 'https://esm.sh/@point-of-sale/receipt-printer-encoder';
 
-        // --- 1. FUNGSI UTILITAS UI ---
         window.updateStatus = function(id, message, type = 'info') {
             const el = document.getElementById(id);
             el.innerHTML = message;
@@ -42,11 +41,9 @@
             console.log(`[${type.toUpperCase()}] ${message}`);
         };
 
-        // --- 2. FUNGSI INTI BLUETOOTH (Smart Sender) ---
-        async function connectAndWriteBLE(requestOptions, payload, statusId) {
-            if (!navigator.bluetooth) {
-                throw new Error('Web Bluetooth API tidak didukung di browser ini.');
-            }
+        // --- FUNGSI PENGIRIMAN CHUNKING (TANPA DELAY) ---
+        async function connectAndWriteBLE(requestOptions, payloadBytes, statusId) {
+            if (!navigator.bluetooth) throw new Error('Web Bluetooth API tidak didukung.');
 
             window.updateStatus(statusId, 'Membuka pop-up pencarian Bluetooth...', 'info');
             const device = await navigator.bluetooth.requestDevice(requestOptions);
@@ -67,46 +64,28 @@
 
             if (!targetCharacteristic) {
                 device.gatt.disconnect();
-                throw new Error("Gagal menemukan jalur Write pada printer ini.");
+                throw new Error("Gagal menemukan jalur Write.");
             }
 
-            window.updateStatus(statusId, 'Mengirim data ke printer...', 'info');
+            window.updateStatus(statusId, 'Mengirim data...', 'info');
             const canWriteWithoutResponse = targetCharacteristic.properties.writeWithoutResponse;
             
-            // Helper untuk eksekusi penulisan byte
-            const writeData = async (chunk) => {
+            // Pengiriman Cepat per 100 byte (Terbukti membuat mesin Clabel merespons)
+            for (let offset = 0; offset < payloadBytes.length; offset += 100) {
+                const chunk = payloadBytes.slice(offset, offset + 100);
                 if (canWriteWithoutResponse) {
                     await targetCharacteristic.writeValueWithoutResponse(chunk);
                 } else {
                     await targetCharacteristic.writeValue(chunk);
                 }
-            };
-
-            // LOGIKA PENGIRIMAN CERDAS
-            if (payload instanceof Uint8Array) {
-                // Mode Struk (Kirim per 100 byte tanpa delay)
-                for (let offset = 0; offset < payload.length; offset += 100) {
-                    await writeData(payload.slice(offset, offset + 100));
-                }
-            } else if (Array.isArray(payload)) {
-                // Mode Label (Kirim baris demi baris dengan jeda 30ms)
-                const encoder = new TextEncoder();
-                for (const cmd of payload) {
-                    await writeData(encoder.encode(cmd + "\r\n"));
-                    await new Promise(resolve => setTimeout(resolve, 30)); 
-                }
             }
 
-            // Selalu putus koneksi setelah pengiriman selesai
             device.gatt.disconnect();
             window.updateStatus(statusId, 'Cetak Bluetooth Berhasil!', 'success');
         }
 
-
-        // --- 3. EKSEKUSI CETAK STRUK ---
         window.printReceiptBT = async function() {
             try {
-                // Generate format struk menggunakan Encoder (Output berupa Uint8Array)
                 const receiptBytes = new ReceiptPrinterEncoder()
                     .initialize()
                     .align('center')
@@ -118,13 +97,6 @@
                     .align('left')
                     .line('Kopi Hitam             15.000')
                     .line('Nasi Goreng            25.000')
-                    .newline()
-                    .align('right')
-                    .bold(true)
-                    .line('TOTAL: 40.000')
-                    .bold(false)
-                    .align('center')
-                    .line(new Date().toLocaleString())
                     .newline()
                     .cut('full')
                     .encode();
@@ -140,26 +112,29 @@
                 };
 
                 await connectAndWriteBLE(requestOptions, receiptBytes, 'status-receipt');
-
             } catch (error) {
                 window.updateStatus('status-receipt', `Gagal: ${error.message}`, 'error');
             }
         };
 
-
-        // --- 4. EKSEKUSI CETAK LABEL (CLABEL) ---
         window.printLabelBT = async function() {
             try {
-                // Menggunakan bahasa CPCL (Sering digunakan oleh Clabel)
-                const cpclCommands = [
-                    "! 0 200 200 240 1", // Inisialisasi: Offset 0, 200dpi, Y-Height 240 (30mm), Qty 1
-                    "PAGE-WIDTH 400",    // X-Width 400 (50mm)
-                    "TEXT 4 0 20 20 TEST JARIVIS", // Format: TEXT [font] [size] [X] [Y] [Teks]
-                    "TEXT 4 0 20 70 Rp 99.000",
-                    "BARCODE 128 1 1 50 20 120 JARIVIS123", // Format: BARCODE [tipe] [width] [ratio] [height] [X] [Y] [Data]
-                    "FORM",  // Instruksikan mesin untuk mencari batas GAP stiker selanjutnya
-                    "PRINT"  // Eksekusi cetak
-                ];
+                // KEMBALI KE TSPL: Disatukan menjadi satu string dengan pemisah \r\n
+                // Menggunakan DENSITY 15 (sangat tebal) dan Font "4"
+                const tsplString = [
+                    "SIZE 50 mm,30 mm",
+                    "GAP 2 mm,0 mm",
+                    "DIRECTION 1",
+                    "DENSITY 15",
+                    "CLS",
+                    'TEXT 20,20,"4",0,1,1,"JARIVIS"',
+                    'TEXT 20,70,"4",0,1,1,"Rp 99.000"',
+                    'BARCODE 20,120,"128",60,1,0,2,2,"JARIVIS123"',
+                    "PRINT 1,1"
+                ].join("\r\n") + "\r\n"; // Wajib diakhiri enter
+
+                const encoder = new TextEncoder();
+                const labelBytes = encoder.encode(tsplString);
 
                 const requestOptions = {
                     filters: [{ namePrefix: "CT221B" }, { namePrefix: "Clabel" }],
@@ -170,9 +145,7 @@
                     ]
                 };
 
-                // Panggil fungsi dengan array CPCL
-                await connectAndWriteBLE(requestOptions, cpclCommands, 'status-label');
-
+                await connectAndWriteBLE(requestOptions, labelBytes, 'status-label');
             } catch (error) {
                 window.updateStatus('status-label', `Gagal: ${error.message}`, 'error');
             }
