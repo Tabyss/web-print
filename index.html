@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Print Test</title>
+    <title>Jarivis Separated Print Test</title>
     <style>
         body { font-family: system-ui, -apple-system, sans-serif; padding: 20px; max-width: 600px; margin: 0 auto; background-color: #f4f4f9; }
         .card { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 25px; }
@@ -16,196 +16,139 @@
 
         .row { display: flex; gap: 10px; }
         .row .form-group { flex: 1; }
+        .row .btn-group { display: flex; gap: 10px; flex: 1; margin-top: 10px; margin-bottom: 10px; }
 
-        button { border: none; padding: 15px; font-size: 16px; border-radius: 8px; cursor: pointer; width: 100%; font-weight: bold; color: white; margin-top: 10px; margin-bottom: 10px; }
-        .btn-receipt { background-color: #10b981; }
-        .btn-label { background-color: #3b82f6; }
+        button { border: none; padding: 15px; font-size: 14px; border-radius: 8px; cursor: pointer; width: 100%; font-weight: bold; color: white; }
+        .btn-connect { background-color: #f59e0b; color: #fff; }
+        .btn-print { background-color: #10b981; }
+        .btn-label-connect { background-color: #6366f1; color: #fff; }
+        .btn-label-print { background-color: #3b82f6; }
         button:active { opacity: 0.8; }
+        button:disabled { background-color: #cbd5e1; cursor: not-allowed; }
         
         .status-box { margin-top: 10px; padding: 10px; border-radius: 6px; font-size: 0.9rem; background: #f8fafc; border: 1px solid #e2e8f0; word-wrap: break-word; text-align: center; }
         .error { color: #ef4444; font-weight: bold; background: #fef2f2; }
         .success { color: #10b981; font-weight: bold; background: #f0fdf4; }
+        .connected { color: #3b82f6; font-weight: bold; background: #eff6ff; }
     </style>
 </head>
 <body>
 
     <div class="card">
-        <h2>Cetak Struk Dinamis (VSC MP-58C)</h2>
+        <h2>🧾 Cetak Struk (VSC MP-58C)</h2>
         
         <div class="row">
-            <div class="form-group">
-                <label>Nama Kasir:</label>
-                <input type="text" id="rcptCashier" value="Admin Jarivis">
-            </div>
-            <div class="form-group">
-                <label>Metode Bayar:</label>
-                <input type="text" id="rcptMethod" value="QRIS BCA">
-            </div>
+            <div class="form-group"><label>Nama Kasir:</label><input type="text" id="rcptCashier" value="Admin Jarivis"></div>
+            <div class="form-group"><label>Metode Bayar:</label><input type="text" id="rcptMethod" value="QRIS BCA"></div>
         </div>
-
-        <div class="form-group">
-            <label>Nama Item yang Dibeli:</label>
-            <input type="text" id="rcptItemName" value="Kopi Susu Aren Spesial">
-        </div>
-
+        <div class="form-group"><label>Nama Item:</label><input type="text" id="rcptItemName" value="Kopi Susu Aren Spesial"></div>
         <div class="row">
-            <div class="form-group">
-                <label>Harga Satuan:</label>
-                <input type="number" id="rcptItemPrice" value="25000">
-            </div>
-            <div class="form-group">
-                <label>Jumlah (Qty):</label>
-                <input type="number" id="rcptItemQty" value="2">
-            </div>
+            <div class="form-group"><label>Harga Satuan:</label><input type="number" id="rcptItemPrice" value="25000"></div>
+            <div class="form-group"><label>Jumlah (Qty):</label><input type="number" id="rcptItemQty" value="2"></div>
         </div>
         
-        <button class="btn-receipt" onclick="printReceipt()">Koneksikan & Cetak Struk</button>
-        <div id="status-receipt" class="status-box">Status: Menunggu instruksi...</div>
+        <div class="row btn-group">
+            <button class="btn-connect" id="btnConnectReceipt" onclick="connectReceiptPrinter()">🔌 Hubungkan</button>
+            <button class="btn-print" id="btnPrintReceipt" onclick="executePrintReceipt()" disabled>🖨️ Cetak</button>
+        </div>
+        <div id="status-receipt" class="status-box">Status: Belum Terhubung</div>
     </div>
 
     <div class="card">
-        <h2>Cetak Label Dinamis (Clabel CT221B)</h2>
+        <h2>🏷️ Cetak Label (Clabel CT221B)</h2>
         
-        <div class="form-group">
-            <label>Nama Produk (Stiker):</label>
-            <input type="text" id="lblItemName" value="Matcha Latte Premium">
-        </div>
-        
+        <div class="form-group"><label>Nama Produk:</label><input type="text" id="lblItemName" value="Matcha Latte Premium"></div>
         <div class="row">
-            <div class="form-group">
-                <label>Harga Jual:</label>
-                <input type="number" id="lblItemPrice" value="22000">
-            </div>
-            <div class="form-group">
-                <label>Kode Barcode:</label>
-                <input type="text" id="lblBarcode" value="MCH00123">
-            </div>
+            <div class="form-group"><label>Harga Jual:</label><input type="number" id="lblItemPrice" value="22000"></div>
+            <div class="form-group"><label>Barcode:</label><input type="text" id="lblBarcode" value="MCH00123"></div>
         </div>
         
-        <button class="btn-label" onclick="printLabel()">Koneksikan & Cetak Label</button>
-        <div id="status-label" class="status-box">Status: Menunggu instruksi...</div>
+        <div class="row btn-group">
+            <button class="btn-label-connect" id="btnConnectLabel" onclick="connectLabelPrinter()">🔌 Hubungkan</button>
+            <button class="btn-label-print" id="btnPrintLabel" onclick="executePrintLabel()" disabled>🖨️ Cetak</button>
+        </div>
+        <div id="status-label" class="status-box">Status: Belum Terhubung</div>
     </div>
 
     <script type="module">
         import ReceiptPrinterEncoder from 'https://esm.sh/@point-of-sale/receipt-printer-encoder';
 
-        // --- Fungsi Utilitas ---
+        // VARIABEL GLOBAL UNTUK MENYIMPAN KONEKSI
+        let receiptDeviceObj = null;
+        let receiptCharObj = null;
+
+        let labelDeviceObj = null;
+        let labelCharObj = null;
+
         window.updateStatus = function(id, message, type = 'info') {
-            const el = document.getElementById(id);
-            el.innerHTML = message;
-            el.className = `status-box ${type}`;
+            document.getElementById(id).innerHTML = message;
+            document.getElementById(id).className = `status-box ${type}`;
         };
 
         function sanitizeTSPL(text) {
             return text.replace(/"/g, "'");
         }
 
-        // --- Helper Auto-Connect ---
-        async function getBluetoothDevice(requestOptions, allowedPrefixes, statusId) {
+        // --- CORE KONEKSI (Hanya membuka jembatan, tidak mencetak) ---
+        async function establishConnection(requestOptions, allowedPrefixes, statusId) {
+            if (!navigator.bluetooth) throw new Error("Bluetooth tidak didukung.");
+
+            let device = null;
+            
+            // Coba ambil dari memori dulu
             if (navigator.bluetooth.getDevices) {
                 try {
-                    window.updateStatus(statusId, 'auto connect browser...', 'info');
+                    window.updateStatus(statusId, 'Mengecek memori...', 'info');
                     const savedDevices = await navigator.bluetooth.getDevices();
-                    
-                    const targetDevice = savedDevices.find(device => {
-                        if (!device.name) return false;
-                        if (allowedPrefixes.length === 0) return true; // Untuk Struk (acceptAllDevices)
-                        return allowedPrefixes.some(prefix => device.name.startsWith(prefix));
+                    device = savedDevices.find(d => {
+                        if (!d.name) return false;
+                        if (allowedPrefixes.length === 0) return true;
+                        return allowedPrefixes.some(prefix => d.name.startsWith(prefix));
                     });
-
-                    if (targetDevice) {
-                        window.updateStatus(statusId, `${targetDevice.name} connecting`, 'success');
-                        return targetDevice; 
-                    }
-                } catch (error) {
-                    console.warn("Fitur getDevices error:", error);
-                }
+                } catch (e) { console.warn(e); }
             }
-            window.updateStatus(statusId, 'Pencarian Bluetooth...', 'info');
-            return await navigator.bluetooth.requestDevice(requestOptions);
-        }
 
-        // --- Helper Eksekusi Data (Chunking) ---
-        async function sendDataToPrinter(device, payloadBytes, statusId) {
+            // Jika di memori tidak ada, buka pop-up
+            if (!device) {
+                window.updateStatus(statusId, 'Membuka pop-up pencarian...', 'info');
+                device = await navigator.bluetooth.requestDevice(requestOptions);
+            }
+
             window.updateStatus(statusId, `Menghubungkan ke ${device.name}...`, 'info');
             const server = await device.gatt.connect();
             const services = await server.getPrimaryServices();
-            let targetCharacteristic = null;
+            let characteristic = null;
 
             for (const service of services) {
                 const characteristics = await service.getCharacteristics();
-                targetCharacteristic = characteristics.find(
-                    c => c.properties.write || c.properties.writeWithoutResponse
-                );
-                if (targetCharacteristic) break;
+                characteristic = characteristics.find(c => c.properties.write || c.properties.writeWithoutResponse);
+                if (characteristic) break;
             }
 
-            if (!targetCharacteristic) throw new Error("Jalur Write tidak ditemukan pada printer.");
+            if (!characteristic) throw new Error("Gagal menemukan jalur Write.");
+            
+            return { device, characteristic };
+        }
 
-            window.updateStatus(statusId, 'Mengirim data ke printer...', 'info');
-            const canWriteWithoutResponse = targetCharacteristic.properties.writeWithoutResponse;
-
+        // --- CORE PENGIRIMAN DATA (Memakai jembatan yang sudah terbuka) ---
+        async function sendChunks(characteristic, payloadBytes) {
+            const canWriteWithoutResponse = characteristic.properties.writeWithoutResponse;
             for (let offset = 0; offset < payloadBytes.length; offset += 100) {
                 const chunk = payloadBytes.slice(offset, offset + 100);
                 if (canWriteWithoutResponse) {
-                    await targetCharacteristic.writeValueWithoutResponse(chunk);
+                    await characteristic.writeValueWithoutResponse(chunk);
                 } else {
-                    await targetCharacteristic.writeValue(chunk);
+                    await characteristic.writeValue(chunk);
                 }
             }
-
-            device.gatt.disconnect();
-            window.updateStatus(statusId, 'Cetak Berhasil!', 'success');
+            // KUNCI: KITA TIDAK MEMANGGIL device.gatt.disconnect() DI SINI
         }
 
-        // ================= EKSEKUSI CETAK STRUK =================
-        window.printReceipt = async function() {
-            if (!navigator.bluetooth) return window.updateStatus('status-receipt', 'Bluetooth tidak didukung.', 'error');
-            
+
+        // ================= TOMBOL HUBUNGKAN (STRUK) =================
+        window.connectReceiptPrinter = async function() {
             try {
-                // Ambil Data Input
-                const cashier = document.getElementById('rcptCashier').value || "-";
-                const method = document.getElementById('rcptMethod').value || "-";
-                const itemName = document.getElementById('rcptItemName').value || "Item";
-                const price = parseInt(document.getElementById('rcptItemPrice').value) || 0;
-                const qty = parseInt(document.getElementById('rcptItemQty').value) || 1;
-                const total = price * qty;
-                const dateStr = new Date().toLocaleString('id-ID');
-
-                // Susun Struk ESC/POS
-                let encoder = new ReceiptPrinterEncoder()
-                    .initialize()
-                    .align('center')
-                    .bold(true).line('JARIVIS STORE').bold(false)
-                    .line('Jl. Contoh Toko No.123')
-                    .newline()
-                    .align('left')
-                    .line(`Kasir  : ${cashier}`)
-                    .line(`Waktu  : ${dateStr}`)
-                    .line(`Metode : ${method}`)
-                    .line('--------------------------------');
-
-                // Logika padding harga struk
-                const qtyPriceStr = `${qty}x ${price.toLocaleString('id-ID')}`;
-                const totalLineStr = total.toLocaleString('id-ID');
-                const padLength = 32 - totalLineStr.length; // Lebar standar kertas 58mm
-                const lineItem = (qtyPriceStr.padEnd(padLength, ' ')) + totalLineStr;
-
-                const payloadBytes = encoder
-                    .line(itemName)
-                    .line(lineItem)
-                    .line('--------------------------------')
-                    .align('right')
-                    .bold(true).line(`TOTAL: Rp ${total.toLocaleString('id-ID')}`).bold(false)
-                    .newline()
-                    .align('center')
-                    .line('Terima Kasih!')
-                    .newline().newline().newline()
-                    .cut('full')
-                    .encode();
-
-                // Setup Koneksi Struk
-                const requestOptions = {
+                const reqOptions = {
                     acceptAllDevices: true,
                     optionalServices: [
                         "000018f0-0000-1000-8000-00805f9b34fb",
@@ -214,44 +157,59 @@
                         "0000ffe0-0000-1000-8000-00805f9b34fb"
                     ]
                 };
+                
+                const connection = await establishConnection(reqOptions, [], 'status-receipt');
+                receiptDeviceObj = connection.device;
+                receiptCharObj = connection.characteristic;
 
-                const device = await getBluetoothDevice(requestOptions, [], 'status-receipt');
-                await sendDataToPrinter(device, payloadBytes, 'status-receipt');
-
+                window.updateStatus('status-receipt', `✅ Terhubung: ${receiptDeviceObj.name}`, 'connected');
+                document.getElementById('btnPrintReceipt').disabled = false;
+                
             } catch (error) {
                 window.updateStatus('status-receipt', `Gagal: ${error.message}`, 'error');
             }
         };
 
-        // ================= EKSEKUSI CETAK LABEL =================
-        window.printLabel = async function() {
-            if (!navigator.bluetooth) return window.updateStatus('status-label', 'Bluetooth tidak didukung.', 'error');
-            
+        // ================= TOMBOL CETAK (STRUK) =================
+        window.executePrintReceipt = async function() {
+            if (!receiptCharObj || !receiptDeviceObj.gatt.connected) {
+                return window.updateStatus('status-receipt', 'Koneksi terputus. Klik Hubungkan lagi.', 'error');
+            }
+
             try {
-                // Ambil Data Input
-                const name = document.getElementById('lblItemName').value || "-";
-                const price = parseInt(document.getElementById('lblItemPrice').value) || 0;
-                const barcode = document.getElementById('lblBarcode').value || "0000";
-                const formattedPrice = "Rp " + price.toLocaleString("id-ID");
+                window.updateStatus('status-receipt', 'Mencetak...', 'info');
+                
+                const cashier = document.getElementById('rcptCashier').value || "-";
+                const method = document.getElementById('rcptMethod').value || "-";
+                const itemName = document.getElementById('rcptItemName').value || "Item";
+                const price = parseInt(document.getElementById('rcptItemPrice').value) || 0;
+                const qty = parseInt(document.getElementById('rcptItemQty').value) || 1;
+                const total = price * qty;
+                const padLength = 32 - total.toLocaleString('id-ID').length;
+                const lineItem = (`${qty}x ${price.toLocaleString('id-ID')}`.padEnd(padLength, ' ')) + total.toLocaleString('id-ID');
 
-                // Susun Template TSPL
-                const tsplString = [
-                    "SIZE 50 mm,30 mm",
-                    "GAP 2 mm,0 mm",
-                    "DIRECTION 1",
-                    "DENSITY 15",
-                    "CLS",
-                    `TEXT 20,20,"4",0,1,1,"${sanitizeTSPL(name)}"`,
-                    `TEXT 20,70,"4",0,1,1,"${formattedPrice}"`,
-                    `BARCODE 20,120,"128",60,1,0,2,2,"${sanitizeTSPL(barcode)}"`,
-                    "PRINT 1,1"
-                ].join("\r\n") + "\r\n";
+                let encoder = new ReceiptPrinterEncoder()
+                    .initialize()
+                    .align('center').bold(true).line('JARIVIS STORE').bold(false)
+                    .newline()
+                    .align('left').line(`Kasir  : ${cashier}`).line(`Metode : ${method}`)
+                    .line('--------------------------------')
+                    .line(itemName).line(lineItem)
+                    .line('--------------------------------')
+                    .align('right').bold(true).line(`TOTAL: Rp ${total.toLocaleString('id-ID')}`).bold(false)
+                    .newline().newline().cut('full').encode();
 
-                const encoder = new TextEncoder();
-                const payloadBytes = encoder.encode(tsplString);
+                await sendChunks(receiptCharObj, encoder);
+                window.updateStatus('status-receipt', '✅ Cetak Selesai! (Siap cetak lagi)', 'connected');
+            } catch (error) {
+                window.updateStatus('status-receipt', `Gagal Cetak: ${error.message}`, 'error');
+            }
+        };
 
-                // Setup Koneksi Clabel
-                const requestOptions = {
+        // ================= TOMBOL HUBUNGKAN (LABEL) =================
+        window.connectLabelPrinter = async function() {
+            try {
+                const reqOptions = {
                     filters: [{ namePrefix: "CT221B" }, { namePrefix: "Clabel" }],
                     optionalServices: [
                         "000018f0-0000-1000-8000-00805f9b34fb",
@@ -259,13 +217,46 @@
                         "e7810a71-73ae-499d-8c15-faa9aef0c3f2"
                     ]
                 };
+                
+                const connection = await establishConnection(reqOptions, ["CT221B", "Clabel"], 'status-label');
+                labelDeviceObj = connection.device;
+                labelCharObj = connection.characteristic;
 
-                const allowedNames = ["CT221B", "Clabel"];
-                const device = await getBluetoothDevice(requestOptions, allowedNames, 'status-label');
-                await sendDataToPrinter(device, payloadBytes, 'status-label');
-
+                window.updateStatus('status-label', `✅ Terhubung: ${labelDeviceObj.name}`, 'connected');
+                document.getElementById('btnPrintLabel').disabled = false;
+                
             } catch (error) {
                 window.updateStatus('status-label', `Gagal: ${error.message}`, 'error');
+            }
+        };
+
+        // ================= TOMBOL CETAK (LABEL) =================
+        window.executePrintLabel = async function() {
+            if (!labelCharObj || !labelDeviceObj.gatt.connected) {
+                return window.updateStatus('status-label', 'Koneksi terputus. Klik Hubungkan lagi.', 'error');
+            }
+
+            try {
+                window.updateStatus('status-label', 'Mencetak Label...', 'info');
+                
+                const name = document.getElementById('lblItemName').value || "-";
+                const price = parseInt(document.getElementById('lblItemPrice').value) || 0;
+                const barcode = document.getElementById('lblBarcode').value || "0000";
+
+                const tsplString = [
+                    "SIZE 50 mm,30 mm", "GAP 2 mm,0 mm", "DIRECTION 1", "DENSITY 15", "CLS",
+                    `TEXT 20,20,"4",0,1,1,"${sanitizeTSPL(name)}"`,
+                    `TEXT 20,70,"4",0,1,1,"Rp ${price.toLocaleString("id-ID")}"`,
+                    `BARCODE 20,120,"128",60,1,0,2,2,"${sanitizeTSPL(barcode)}"`,
+                    "PRINT 1,1"
+                ].join("\r\n") + "\r\n";
+
+                const payloadBytes = new TextEncoder().encode(tsplString);
+                await sendChunks(labelCharObj, payloadBytes);
+                
+                window.updateStatus('status-label', '✅ Cetak Selesai! (Siap cetak lagi)', 'connected');
+            } catch (error) {
+                window.updateStatus('status-label', `Gagal Cetak: ${error.message}`, 'error');
             }
         };
     </script>
